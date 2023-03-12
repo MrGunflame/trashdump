@@ -15,10 +15,14 @@ use crate::state::State;
 pub struct File {
     size: u64,
     id: String,
+    name: String,
 }
 
-pub async fn get_file(Path(path): Path<String>, state: State) -> Response<Full<Bytes>> {
-    let Ok(mut dump) = state.dumps.get(&path).await else {
+pub async fn get_file(
+    Path((path, name)): Path<(String, String)>,
+    state: State,
+) -> Response<Full<Bytes>> {
+    let Ok(mut dump) = state.dumps.get(&path,&name).await else {
         return Response::builder().status(StatusCode::NOT_FOUND).body(Full::new(Bytes::new())).unwrap();
     };
 
@@ -34,12 +38,16 @@ pub async fn get_file(Path(path): Path<String>, state: State) -> Response<Full<B
     Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "application/octet-stream")
-        .body(Full::new(Bytes::new()))
+        .body(Full::new(buf.into()))
         .unwrap()
 }
 
-pub async fn create_file(mut body: BodyStream, state: State) -> Response<Full<Bytes>> {
-    let mut dump = state.dumps.insert().await.unwrap();
+pub async fn create_file(
+    Path(name): Path<String>,
+    mut body: BodyStream,
+    state: State,
+) -> Response<Full<Bytes>> {
+    let mut dump = state.dumps.insert(&name).await.unwrap();
     let mut size: u64 = 0;
 
     while let Some(chunk) = body.next().await {
@@ -68,12 +76,23 @@ pub async fn create_file(mut body: BodyStream, state: State) -> Response<Full<By
         if size >= state.max_size {}
     }
 
-    let Ok(hash) = dump.finish().await else {
-        tracing::error!("Failed to finish upload");
-        return Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(Full::new(Bytes::new())).unwrap();
+    let hash = match dump.finish().await {
+        Err(err) => {
+            tracing::error!("Failed to finish upload: {}", err);
+            return Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Full::new(Bytes::new()))
+                .unwrap();
+        }
+        Ok(e) => e,
     };
 
-    let buf = serde_json::to_vec(&File { id: hash, size }).unwrap();
+    let buf = serde_json::to_vec(&File {
+        id: hash,
+        size,
+        name,
+    })
+    .unwrap();
 
     Response::builder()
         .header("Content-Type", "application/json")

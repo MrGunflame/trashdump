@@ -49,16 +49,16 @@ pub struct Dumps {
 }
 
 impl Dumps {
-    pub async fn insert(&self) -> io::Result<Dump> {
+    pub async fn insert(&self, name: &str) -> io::Result<Dump> {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
 
         let path = format!("./app/partial/{}", id);
 
-        Dump::new(path).await
+        Dump::new(path, name).await
     }
 
-    pub async fn get(&self, id: &str) -> io::Result<File> {
-        let path = format!("./app/dumps/{}", id);
+    pub async fn get(&self, id: &str, name: &str) -> io::Result<File> {
+        let path = format!("./app/dumps/{}/{}", id, name);
         File::open(path).await
     }
 }
@@ -66,16 +66,21 @@ impl Dumps {
 #[derive(Debug)]
 pub struct Dump {
     path: String,
+    name: String,
     hasher: Sha256,
     file: File,
 }
 
 impl Dump {
-    pub async fn new(path: String) -> io::Result<Self> {
-        let file = File::create(&path).await?;
+    pub async fn new(path: String, name: &str) -> io::Result<Self> {
+        tokio::fs::create_dir(&path).await?;
+
+        let file = format!("{}/{}", path, name);
+        let file = File::create(&file).await?;
 
         Ok(Self {
             path,
+            name: String::from(name),
             file,
             hasher: Sha256::new(),
         })
@@ -97,6 +102,7 @@ impl Dump {
 
     pub async fn abort(self) -> io::Result<()> {
         drop(self.file);
-        tokio::fs::remove_file(self.path).await
+        tokio::fs::remove_file(format!("{}/{}", self.path, self.name)).await?;
+        tokio::fs::remove_dir(self.path).await
     }
 }
