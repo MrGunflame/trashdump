@@ -3,6 +3,14 @@ name = "trashdump"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
+axum = "0.6.10"
+futures = "0.3.27"
+hex = "0.4.3"
+parking_lot = "0.12.1"
+pretty_env_logger = "0.4.0"
+serde = { version = "1.0.155", features = ["derive"] }
+serde_json = "1.0.94"
+sha2 = "0.10.6"
+tokio = { version = "1.26.0", features = ["full"] }
+tracing = { version = "0.1.37", features = ["log-always"] }
